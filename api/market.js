@@ -6,7 +6,7 @@ const CRYPTO_SYMBOLS = new Set(Object.keys(CRYPTO_PAIRS));
 function json(res, status=200, response) { response.setHeader("content-type","application/json; charset=utf-8"); response.setHeader("cache-control","no-store"); return response.status(status).json(res); }
 export default async function handler(req, res) {
   const url = new URL(req.url, "http://localhost");
-  const symbol = (url.searchParams.get("symbol") || "BTC/USD").toUpperCase();
+  const symbol = (url.searchParams.get("symbol") || "BTC/USDT").toUpperCase();
   const interval = url.searchParams.get("interval") || "1h";
   if (!ALLOWED_INTERVALS.has(interval)) return json({error:"Interval tidak didukung."},400,res);
   try {
@@ -28,7 +28,27 @@ export default async function handler(req, res) {
       },200,res);
     }
     const apiKey = process.env.TWELVEDATA_API_KEY;
-    if (!apiKey) return json({error:"Feed "+symbol+" memerlukan TWELVEDATA_API_KEY. Tambahkan API key Twelve Data pada Environment Variables proyek Vercel."},503,res);
+    if (!apiKey) {
+      const yahooSymbols = {"EUR/USD":"EURUSD=X","XAU/USD":"XAUUSD=X","AAPL":"AAPL"};
+      const yahooSymbol = yahooSymbols[symbol];
+      if (!yahooSymbol) return json({error:"Instrumen tidak didukung: "+symbol},400,res);
+      const yahooIntervals = {"1min":"1m","5min":"5m","15min":"15m","30min":"30m","1h":"60m","2h":"60m","4h":"60m","8h":"60m","1day":"1d","1week":"1wk"};
+      const range = interval==="1week" ? "1y" : interval==="1day" ? "1mo" : "5d";
+      const yahooUrl = "https://query1.finance.yahoo.com/v8/finance/chart/"+encodeURIComponent(yahooSymbol)+"?range="+range+"&interval="+yahooIntervals[interval]+"&includePrePost=false";
+      const yahooResponse = await fetch(yahooUrl,{headers:{"accept":"application/json","user-agent":"Mozilla/5.0 TradingAgent/1.0"},cache:"no-store"});
+      if (!yahooResponse.ok) throw new Error("Penyedia data publik tidak tersedia untuk "+symbol+" (HTTP "+yahooResponse.status+").");
+      const yahooData = await yahooResponse.json();
+      const result = yahooData.chart?.result?.[0];
+      if (!result?.timestamp?.length) throw new Error("Penyedia data tidak mengembalikan candle untuk "+symbol+".");
+      const q = result.indicators?.quote?.[0] || {};
+      const candles = result.timestamp.map((ts,i)=>({time:new Date(ts*1000).toISOString(),open:Number(q.open?.[i]),high:Number(q.high?.[i]),low:Number(q.low?.[i]),close:Number(q.close?.[i]),volume:Number(q.volume?.[i]||0)})).filter(c=>[c.open,c.high,c.low,c.close].every(Number.isFinite));
+      if (!candles.length) throw new Error("Data candle tidak valid untuk "+symbol+".");
+      const meta = result.meta || {};
+      const price = Number(meta.regularMarketPrice ?? candles[candles.length-1].close);
+      const previous = Number(meta.chartPreviousClose ?? meta.previousClose ?? candles[candles.length-2]?.close ?? price);
+      const changePercent = previous ? ((price-previous)/previous)*100 : 0;
+      return json({symbol,exchange:meta.exchangeName||meta.fullExchangeName||"Yahoo Finance",provider:"Yahoo Finance public chart",interval,price,changePercent,currency:symbol==="AAPL"?"$":symbol==="EUR/USD"?"":"$",updatedAt:new Date().toISOString(),candles},200,res);
+    }
     const tdSymbol = symbol === "AAPL" ? "AAPL" : symbol;
     const [quoteResponse, seriesResponse] = await Promise.all([
       fetch(TWELVE_BASE+"/quote?symbol="+encodeURIComponent(tdSymbol)+"&apikey="+encodeURIComponent(apiKey),{cache:"no-store"}),
