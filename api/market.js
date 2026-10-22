@@ -23,7 +23,7 @@ export default async function handler(req, res) {
       return json({
         symbol, exchange:"Binance Spot", provider:"Binance Public API", interval,
         price:Number(ticker.lastPrice), changePercent:Number(ticker.priceChangePercent),
-        currency:"USDT ", updatedAt:new Date().toISOString(),
+        currency:"USDT", updatedAt:new Date().toISOString(),
         candles:raw.map(k=>({time:new Date(Number(k[0])).toISOString(),open:Number(k[1]),high:Number(k[2]),low:Number(k[3]),close:Number(k[4]),volume:Number(k[5])}))
       },200,res);
     }
