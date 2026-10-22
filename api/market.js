@@ -1,7 +1,8 @@
 const BINANCE_BASE = "https://data-api.binance.vision";
 const TWELVE_BASE = "https://api.twelvedata.com";
 const ALLOWED_INTERVALS = new Set(["1min","5min","15min","30min","1h","2h","4h","8h","1day","1week"]);
-const CRYPTO_SYMBOLS = new Set(["BTC/USD","ETH/USD","SOL/USD"]);
+const CRYPTO_PAIRS = {"BTC/USDT":"BTCUSDT","ETH/USDT":"ETHUSDT","SOL/USDT":"SOLUSDT"};
+const CRYPTO_SYMBOLS = new Set(Object.keys(CRYPTO_PAIRS));
 function json(res, status=200, response) { response.setHeader("content-type","application/json; charset=utf-8"); response.setHeader("cache-control","no-store"); return response.status(status).json(res); }
 export default async function handler(req, res) {
   const url = new URL(req.url, "http://localhost");
@@ -10,7 +11,7 @@ export default async function handler(req, res) {
   if (!ALLOWED_INTERVALS.has(interval)) return json({error:"Interval tidak didukung."},400,res);
   try {
     if (CRYPTO_SYMBOLS.has(symbol)) {
-      const pair = symbol.replace("/","");
+      const pair = CRYPTO_PAIRS[symbol];
       const tf = interval === "1min" ? "1m" : interval === "5min" ? "5m" : interval === "15min" ? "15m" : interval === "30min" ? "30m" : interval === "1h" ? "1h" : interval === "2h" ? "2h" : interval === "4h" ? "4h" : interval === "8h" ? "8h" : interval === "1day" ? "1d" : "1w";
       const [tickerResponse, candleResponse] = await Promise.all([
         fetch(BINANCE_BASE+"/api/v3/ticker/24hr?symbol="+pair,{cache:"no-store"}),
@@ -22,7 +23,7 @@ export default async function handler(req, res) {
       return json({
         symbol, exchange:"Binance Spot", provider:"Binance Public API", interval,
         price:Number(ticker.lastPrice), changePercent:Number(ticker.priceChangePercent),
-        currency:"$", updatedAt:new Date().toISOString(),
+        currency:"USDT ", updatedAt:new Date().toISOString(),
         candles:raw.map(k=>({time:new Date(Number(k[0])).toISOString(),open:Number(k[1]),high:Number(k[2]),low:Number(k[3]),close:Number(k[4]),volume:Number(k[5])}))
       },200,res);
     }
