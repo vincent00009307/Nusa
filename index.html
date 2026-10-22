@@ -36,7 +36,7 @@ document.querySelectorAll("[data-view]").forEach(b=>b.addEventListener("click",(
 const toast=document.getElementById("toast");let toastTimer;function notify(msg){toast.textContent=msg;toast.classList.add("show");clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.classList.remove("show"),4200)}
 const marketSelect=document.getElementById("marketSelect"), intervalSelect=document.getElementById("intervalSelect");
 const fmt=(n,symbol)=>new Intl.NumberFormat("en-US",{minimumFractionDigits:2,maximumFractionDigits:n<1?6:2}).format(n);
-let lastMarketData=null, requestBusy=false;
+let lastMarketData=null, requestBusy=false, pendingMarketReload=false;
 function setConnection(ok,msg){const el=document.getElementById("connectionStatus");if(!el)return;el.innerHTML='<span class="dot" style="background:'+(ok?'#36d399':'#f0c878')+'"></span> '+msg;el.style.borderColor=ok?'#285744':'#5b4b2c';el.style.color=ok?'#9ef0c2':'#e7d8ad'}
 function drawChart(candles){
  const box=document.getElementById("chartwrap"); if(!candles||candles.length<2){box.textContent="Data candle belum tersedia.";return}
@@ -79,7 +79,7 @@ async function refreshSignalQueue(){
  tbody.innerHTML=rows.join("");status.textContent="RULE ENGINE UPDATED";
 }
 async function loadMarket(){
- if(requestBusy)return;requestBusy=true;
+ if(requestBusy){pendingMarketReload=true;return;}requestBusy=true;
  const symbol=marketSelect.value,interval=intervalSelect.value;
  document.getElementById("marketSubline").textContent="Mengambil "+symbol+" · "+interval+" dari market API…";
  try{
@@ -105,7 +105,7 @@ async function loadMarket(){
   document.getElementById("chartwrap").innerHTML='<div style="padding:20px;text-align:center"><b>Market data tidak tersedia</b><div style="margin-top:8px;font-size:12px;max-width:430px">'+err.message+'</div><div style="margin-top:8px;font-size:11px">Feed publik bisa mengalami keterlambatan atau pembatasan. Jika feed utama gagal, coba pilih interval lain atau muat ulang beberapa saat lagi.</div></div>';
   document.getElementById("lastUpdated").textContent="Belum diperbarui";
   setConnection(false,"FEED PARTIALLY AVAILABLE");
- }finally{requestBusy=false}
+ }finally{requestBusy=false;if(pendingMarketReload){pendingMarketReload=false;loadMarket()}}
 }
 marketSelect.addEventListener("change",loadMarket);intervalSelect.addEventListener("change",loadMarket);
 document.getElementById("demoBtn").addEventListener("click",()=>{notify("Data harga live tersedia pada Market Overview. Sinyal belum otomatis dibuat sebelum strategi teruji.");showView("signals")});
